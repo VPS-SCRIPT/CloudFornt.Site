@@ -1,0 +1,755 @@
+<!doctype html>
+<html lang="en">
+ <head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Cloudflare DNS Manager</title>
+  <!-- Tailwind CSS CDN -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <!-- FontAwesome for Icons -->
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
+    body {
+      font-family: 'Inter', sans-serif;
+    }
+  </style>
+ </head>
+ <body class="bg-slate-900 text-slate-100 min-h-screen">
+  <!-- Success Center Modal Alert System -->
+  <div id="successModal" class="fixed inset-0 z-50 items-center justify-center bg-slate-950/80 backdrop-blur-sm hidden transition-all duration-300">
+   <div class="bg-slate-900 border border-slate-800 rounded-2xl p-6 max-w-md w-full mx-4 shadow-2xl relative text-center transform scale-95 transition-transform duration-300" id="modalCard">
+    <!-- အောင်မြင်မှု အမှန်ခြစ်ပုံစံ -->
+    <div class="w-16 h-16 bg-emerald-500/10 text-emerald-400 rounded-full flex items-center justify-center mx-auto mb-4 border border-emerald-500/20 text-3xl">
+     <i class="fa-solid fa-circle-check animate-bounce"></i>
+    </div>
+    <!-- အောင်မြင်မှု ခေါင်းစဉ် -->
+    <h3 id="modalTitle" class="text-xl font-bold text-slate-100 mb-2">Create DNS Successfully</h3>
+    <p class="text-xs text-slate-400 mb-4">Cloudflare DNS ထဲသို့ ဒေတာများကို အောင်မြင်စွာ ထည့်သွင်းသိမ်းဆည်းပြီးပါပြီ။</p>
+    <!-- IP နှင့် Hostname ပြသသည့် ကတ်ပြား -->
+    <div class="bg-slate-950 rounded-xl p-4 text-left border border-slate-800 space-y-3 mb-6">
+     <div class="flex justify-between items-center text-sm gap-2">
+      <span class="text-slate-400 font-medium whitespace-nowrap">IP / Value:</span>
+      <div class="flex items-center gap-1.5 justify-end overflow-hidden">
+       <span id="modalIp" class="font-mono text-slate-200 truncate select-all text-right">xxxxxx</span>
+       <button id="modalIpCopyBtn" class="text-slate-400 hover:text-slate-200 transition p-1 hover:bg-slate-800 rounded shrink-0"><i class="fa-regular fa-copy text-xs"></i></button>
+      </div>
+     </div>
+     <div class="flex justify-between items-center text-sm border-t border-slate-800/60 pt-3 gap-2">
+      <span class="text-slate-400 font-medium whitespace-nowrap">Hostname:</span>
+      <div class="flex items-center gap-1.5 justify-end overflow-hidden">
+       <span id="modalHostname" class="font-mono text-slate-200 truncate select-all text-right">xxxxxx</span>
+       <button id="modalHostnameCopyBtn" class="text-slate-400 hover:text-slate-200 transition p-1 hover:bg-slate-800 rounded shrink-0"><i class="fa-regular fa-copy text-xs"></i></button>
+      </div>
+     </div>
+    </div>
+    <!-- ပိတ်ရန် ခလုတ် -->
+    <button onclick="closeSuccessModal()" class="w-full bg-emerald-600 hover:bg-emerald-500 text-white font-semibold py-3 rounded-xl transition duration-150 shadow-lg shadow-emerald-500/10 active:scale-[0.98]">ကောင်းပြီ</button>
+   </div>
+  </div>
+  <!-- Toast Notification Alert System -->
+  <div id="toastContainer" class="fixed top-4 right-4 z-50 flex flex-col gap-3 max-w-sm w-full px-4"></div>
+  <!-- Navigation Bar -->
+  <nav class="border-b border-slate-800 bg-slate-950/50 backdrop-blur sticky top-0 z-50">
+   <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+    <div class="flex items-center justify-between h-16">
+     <div class="flex items-center gap-3">
+      <div class="bg-orange-500 text-white p-2 rounded-lg shadow-lg shadow-orange-500/20">
+       <i class="fa-solid fa-cloud-bolt text-lg"></i>
+      </div>
+      <span class="font-bold text-xl tracking-tight bg-gradient-to-r from-orange-400 to-amber-300 bg-clip-text text-transparent"> CF DNS Manager </span>
+     </div>
+     <div class="flex items-center gap-2">
+      <!-- Refresh Button -->
+      <button onclick="fetchDnsRecords()" class="bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-semibold px-3 py-1.5 rounded-lg border border-slate-700 flex items-center gap-2 transition active:scale-95"><i class="fa-solid fa-rotate-right"></i> Refresh</button>
+      <div class="flex items-center gap-2 text-xs text-slate-400 bg-slate-950 px-3 py-1.5 rounded-full border border-slate-800">
+       <span id="connectionDot" class="w-2 h-2 rounded-full bg-slate-500 animate-pulse"></span> <span id="connectionText">API Offline</span>
+      </div>
+     </div>
+    </div>
+   </div>
+  </nav>
+  <!-- Main Container -->
+  <main class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+   <!-- Step 1: Credentials Input Panel (ကုဒ်ထဲမှာ ထည့်မရေးထားဘဲ UI ကနေ ထည့်သွင်းခိုင်းခြင်း) -->
+   <div id="credentialsPanel" class="bg-slate-950 border border-slate-800 rounded-2xl p-6 mb-8 shadow-xl">
+    <div class="flex items-center justify-between mb-4">
+     <div class="flex items-center gap-2">
+      <i class="fa-solid fa-key text-orange-400"></i>
+      <h2 class="text-lg font-semibold">Cloudflare API ချိတ်ဆက်ရန်</h2>
+     </div>
+     <span class="text-xs bg-slate-800 text-slate-400 px-2.5 py-1 rounded-full border border-slate-700"><i class="fa-solid fa-user-shield mr-1"></i> Browser တွင် အမြဲသိမ်းဆည်းထားမည်</span>
+    </div>
+    <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+     <div>
+      <label class="block text-sm font-medium text-slate-400 mb-2">Cloudflare API Token (Edit DNS)</label>
+      <div class="relative">
+       <span class="absolute inset-y-0 left-0 flex items-center pl-3 pointer-events-none text-slate-500"> <i class="fa-solid fa-shield-halved"></i> </span> <input type="password" id="apiToken" placeholder="cfut_sZDYP9JiINPXoydea1..." class="w-full bg-slate-900 border border-slate-800 rounded-xl pl-10 pr-4 py-3 text-slate-100 placeholder-slate-600 focus:outline-none focus:ring-2 focus:ring-orange-500 transition">
+      </div>
+      <span class="text-[11px] text-slate-500 mt-1 block"><i class="fa-solid fa-info-circle"></i> "cfut_" ဖြင့်စတင်သော ရှည်လျားသော API Token ကို ထည့်ပါ။</span>
+     </div>
+     <div>
+      <label class="block text-sm font-medium text-slate-400 mb-2">Cloudflare Zone ID</label>
+      <div class="relative">
+       <span class="absolute inset-y-0 left-0 flex items-center pl-3 pointer-events-none text-slate-500"> <i class="fa-solid fa-globe"></i> </span> <input type="text" id="zoneId" placeholder="d7f34c80eae228bbb560865e535d6c42" class="w-full bg-slate-900 border border-slate-800 rounded-xl pl-10 pr-4 py-3 text-slate-100 placeholder-slate-600 focus:outline-none focus:ring-2 focus:ring-orange-500 transition">
+      </div>
+      <span class="text-[11px] text-slate-500 mt-1 block"><i class="fa-solid fa-info-circle"></i> သင့် Domain ၏ Overview တွင်ရှိသော Zone ID (ဂဏန်း/စာလုံးရောနှော) ကို ထည့်ပါ။ ("cfut_" မဟုတ်ပါ)</span>
+     </div>
+    </div>
+    <div class="mt-6 flex flex-col sm:flex-row gap-4 justify-between items-center border-t border-slate-800/60 pt-4">
+     <p class="text-xs text-slate-500"><i class="fa-solid fa-lock text-emerald-500 mr-1"></i> ဤအချက်အလက်များကို သင့် Browser ၏ Local Storage တွင် လုံခြုံစွာ အမြဲသိမ်းဆည်းထားပါမည်။</p>
+     <div class="flex gap-3 w-full sm:w-auto">
+      <!-- အချက်အလက်များ ပြန်ဖျက်ရန် ခလုတ် -->
+      <button onclick="clearSavedCredentials()" class="w-1/2 sm:w-auto bg-slate-800 hover:bg-slate-700 text-rose-400 hover:text-rose-300 font-medium px-4 py-3 rounded-xl border border-slate-700 transition transform active:scale-95 flex items-center justify-center gap-2 text-sm"><i class="fa-solid fa-trash-can"></i> Clear Saved</button>
+      <!-- ချိတ်ဆက်ရန် ခလုတ် -->
+      <button onclick="saveAndFetch()" class="w-1/2 sm:w-auto bg-gradient-to-r from-orange-500 to-amber-500 hover:from-orange-600 hover:to-amber-600 text-white font-semibold px-6 py-3 rounded-xl shadow-lg shadow-orange-500/20 transition transform active:scale-95 flex items-center justify-center gap-2 text-sm"><i class="fa-solid fa-rotate"></i> ချိတ်ဆက်မည်</button>
+     </div>
+    </div>
+   </div>
+   <!-- Feedback Banner / Status Message -->
+   <div id="statusMessage" class="hidden mb-6 p-4 rounded-xl text-sm flex items-center gap-3"></div>
+   <!-- Main Workspace (ချိတ်ဆက်ပြီးမှ ပေါ်လာမည်ဖြစ်ပြီး မချိတ်ဆက်မီ အရောင်မှိန်ထားမည်) -->
+   <div id="workspace" class="opacity-40 pointer-events-none transition-opacity duration-300">
+    <div class="grid grid-cols-1 lg:grid-cols-3 gap-8">
+     <!-- Left: Add/Edit Record Form -->
+     <div class="lg:col-span-1">
+      <div class="bg-slate-950 border border-slate-800 rounded-2xl p-6 shadow-xl sticky top-24">
+       <div class="flex items-center justify-between mb-6">
+        <div class="flex items-center gap-2">
+         <i class="fa-solid fa-circle-plus text-emerald-400"></i>
+         <h3 class="text-lg font-semibold" id="formTitle">DNS Record အသစ်ထည့်ရန်</h3>
+        </div>
+        <button id="cancelEditBtn" onclick="resetForm()" class="hidden text-xs text-slate-400 hover:text-white bg-slate-800 px-2 py-1 rounded">မပြင်တော့ပါ</button>
+       </div>
+       <form id="dnsForm" onsubmit="handleFormSubmit(event)" class="space-y-4">
+        <input type="hidden" id="editRecordId" value=""> <!-- Record Type -->
+        <div>
+         <label class="block text-xs font-medium text-slate-400 uppercase tracking-wider mb-2">Type (အမျိုးအစား)</label> <select id="recordType" onchange="adjustFormFields()" class="w-full bg-slate-900 border border-slate-700 rounded-xl px-4 py-2.5 text-slate-100 focus:outline-none focus:ring-2 focus:ring-orange-500"> <option value="A">A (IPv4 Address)</option> <option value="AAAA">AAAA (IPv6 Address)</option> <option value="CNAME">CNAME (Alias Name)</option> <option value="TXT">TXT (Text Record)</option> <option value="MX">MX (Mail Exchange)</option> <option value="NS">NS (Name Server)</option> <option value="SRV">SRV (Service Locator)</option> <option value="CAA">CAA (Certification Authority)</option> <option value="LOC">LOC (Location)</option> </select>
+        </div>
+        <!-- Record Name -->
+        <div>
+         <label class="block text-xs font-medium text-slate-400 uppercase tracking-wider mb-2">Name (ဥပမာ- @ သို့မဟုတ် sub-domain)</label> <input type="text" id="recordName" required placeholder="@ သို့မဟုတ် sub" class="w-full bg-slate-900 border border-slate-700 rounded-xl px-4 py-2.5 text-slate-100 focus:outline-none focus:ring-2 focus:ring-orange-500">
+        </div>
+        <!-- Content / Target -->
+        <div>
+         <label id="contentLabel" class="block text-xs font-medium text-slate-400 uppercase tracking-wider mb-2">IPv4 Address (တန်ဖိုး)</label> <input type="text" id="recordContent" required placeholder="192.168.1.1" class="w-full bg-slate-900 border border-slate-700 rounded-xl px-4 py-2.5 text-slate-100 focus:outline-none focus:ring-2 focus:ring-orange-500">
+        </div>
+        <!-- Conditional Fields (MX Priority) -->
+        <div id="mxPriorityField" class="hidden">
+         <label class="block text-xs font-medium text-slate-400 uppercase tracking-wider mb-2">Priority</label> <input type="number" id="recordPriority" value="10" min="0" class="w-full bg-slate-900 border border-slate-700 rounded-xl px-4 py-2.5 text-slate-100 focus:outline-none focus:ring-2 focus:ring-orange-500">
+        </div>
+        <!-- TTL Selection -->
+        <div>
+         <label class="block text-xs font-medium text-slate-400 uppercase tracking-wider mb-2">TTL (Time to Live)</label> <select id="recordTtl" class="w-full bg-slate-900 border border-slate-700 rounded-xl px-4 py-2.5 text-slate-100 focus:outline-none focus:ring-2 focus:ring-orange-500"> <option value="1">Auto (အလိုအလျောက်)</option> <option value="60">1 Minute</option> <option value="300">5 Minutes</option> <option value="1800">30 Minutes</option> <option value="3600">1 Hour</option> <option value="86400">24 Hours</option> </select>
+        </div>
+        <!-- Proxy Status Switch -->
+        <div id="proxySection" class="flex items-center justify-between p-3 bg-slate-900 rounded-xl border border-slate-800">
+         <div class="flex items-center gap-2">
+          <i class="fa-solid fa-cloud text-orange-400 text-sm"></i>
+          <div>
+           <p class="text-sm font-semibold">Proxy Status</p>
+           <p class="text-xs text-slate-400">Cloudflare cloud စနစ် ခံမလား</p>
+          </div>
+         </div>
+         <label class="relative inline-flex items-center cursor-pointer"> <input type="checkbox" id="recordProxy" checked class="sr-only peer"> 
+          <div class="w-11 h-6 bg-slate-700 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-orange-500"></div> </label>
+        </div>
+        <!-- Submit Button -->
+        <button type="submit" id="submitBtn" class="w-full bg-emerald-600 hover:bg-emerald-500 text-white font-semibold py-3 rounded-xl transition duration-150 flex items-center justify-center gap-2"><i class="fa-solid fa-floppy-disk"></i> သိမ်းဆည်းမည်</button>
+       </form>
+      </div>
+     </div>
+     <!-- Right: DNS Records Table/List -->
+     <div class="lg:col-span-2 space-y-4">
+      <!-- Search & Filter Area -->
+      <div class="bg-slate-950 border border-slate-800 rounded-2xl p-4 shadow-xl flex flex-col md:flex-row gap-4 items-center justify-between">
+       <!-- Search Input Box -->
+       <div class="relative w-full md:max-w-md">
+        <span class="absolute inset-y-0 left-0 flex items-center pl-3 pointer-events-none text-slate-400"> <i class="fa-solid fa-magnifying-glass text-sm"></i> </span> <input type="text" id="searchInput" oninput="displayRecords()" placeholder="IP Address သို့မဟုတ် Domain Name ဖြင့် ရှာရန်..." class="w-full bg-slate-900 border border-slate-700 rounded-xl pl-10 pr-4 py-2.5 text-slate-100 placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-orange-500 text-sm transition">
+       </div>
+       <!-- Filter Type Dropdown -->
+       <div class="flex items-center gap-2 w-full md:w-auto justify-end">
+        <span class="text-xs text-slate-400 whitespace-nowrap"><i class="fa-solid fa-filter"></i> အမျိုးအစား:</span> <select id="filterType" onchange="displayRecords()" class="bg-slate-900 border border-slate-700 rounded-xl px-3 py-2 text-sm text-slate-100 focus:outline-none focus:ring-2 focus:ring-orange-500"> <option value="ALL">All Types (အားလုံး)</option> <option value="A">A</option> <option value="AAAA">AAAA</option> <option value="CNAME">CNAME</option> <option value="TXT">TXT</option> <option value="MX">MX</option> <option value="NS">NS</option> <option value="SRV">SRV</option> <option value="CAA">CAA</option> <option value="LOC">LOC</option> </select>
+       </div>
+      </div>
+      <!-- DNS Records Main Table -->
+      <div class="bg-slate-950 border border-slate-800 rounded-2xl p-6 shadow-xl">
+       <div class="flex items-center gap-2 mb-6">
+        <i class="fa-solid fa-list-check text-orange-400"></i>
+        <h3 class="text-lg font-semibold">လက်ရှိ DNS Record များ</h3>
+       </div>
+       <!-- Loading State -->
+       <div id="loadingState" class="hidden py-12 flex flex-col items-center justify-center gap-3">
+        <div class="w-8 h-8 border-4 border-orange-500 border-t-transparent rounded-full animate-spin"></div>
+        <p class="text-sm text-slate-400">DNS Records များကို တောင်းဆိုနေပါသည်...</p>
+       </div>
+       <!-- DNS List Container -->
+       <div class="overflow-x-auto">
+        <table class="w-full text-left border-collapse">
+         <thead>
+          <tr class="border-b border-slate-800 text-xs text-slate-400 uppercase tracking-wider">
+           <th class="py-3 px-4">Type</th>
+           <th class="py-3 px-4">Name</th>
+           <th class="py-3 px-4">Value / Target IP</th>
+           <th class="py-3 px-4 text-center">Proxy</th>
+           <th class="py-3 px-4 text-right">Actions</th>
+          </tr>
+         </thead>
+         <tbody id="dnsTableBody" class="divide-y divide-slate-800/50 text-sm">
+          <!-- Rows will go here dynamically -->
+         </tbody>
+        </table>
+        <!-- Empty State -->
+        <div id="emptyState" class="py-12 text-center text-slate-500">
+         <i class="fa-solid fa-folder-open text-3xl mb-2"></i>
+         <p>ဒေတာ မရှိသေးပါ သို့မဟုတ် ရှာမတွေ့ပါ။</p>
+        </div>
+       </div>
+      </div>
+     </div>
+    </div>
+   </div>
+  </main>
+  <footer class="border-t border-slate-800 mt-20 py-8 text-center text-xs text-slate-500">
+   <p>© 2026 CF DNS Manager - Built for Cloudflare API Management</p>
+  </footer>
+  <!-- JavaScript App Logic -->
+  <script {csp-guard}>
+    const WORKER_URL = "https://dns.cloudfornt-a84.workers.dev";
+    let dnsRecords = [];
+
+    // Browser cache (localStorage) မှ saved credentials များကို အလိုအလျောက် ပြန်ဆွဲယူမည်
+    window.onload = function() {
+      adjustFormFields();
+      
+      const storedToken = localStorage.getItem('cf_api_token');
+      const storedZoneId = localStorage.getItem('cf_zone_id');
+      
+      if (storedToken && storedZoneId) {
+        document.getElementById('apiToken').value = storedToken;
+        document.getElementById('zoneId').value = storedZoneId;
+        // Saved ထားတာရှိလျှင် အလိုအလျောက် DNS list ဆွဲယူရန်
+        fetchDnsRecords();
+      }
+    }
+
+    // ချိတ်ဆက်မှု အချက်အလက်များကို localStorage တွင် သိမ်းဆည်းပြီး ဒေတာဆွဲယူခြင်း
+    function saveAndFetch() {
+      const token = document.getElementById('apiToken').value.trim();
+      const zoneId = document.getElementById('zoneId').value.trim();
+
+      if (!token || !zoneId) {
+        triggerToast("ကျေးဇူးပြု၍ API Token နှင့် Zone ID တို့ကို ထည့်သွင်းပေးပါ!", "error");
+        return;
+      }
+
+      // Local Storage ထဲတွင် လုံခြုံစွာ သိမ်းဆည်းထားလိုက်ပါပြီ
+      localStorage.setItem('cf_api_token', token);
+      localStorage.setItem('cf_zone_id', zoneId);
+
+      fetchDnsRecords();
+    }
+
+    // Saved ထားသော API Key များကို Browser မှ အပြီးသတ်ဖျက်ပစ်ရန်
+    function clearSavedCredentials() {
+      if (confirm("သိမ်းဆည်းထားသော API Token နှင့် Zone ID တို့ကို ဖျက်ပစ်ရန် သေချာပါသလား?")) {
+        localStorage.removeItem('cf_api_token');
+        localStorage.removeItem('cf_zone_id');
+        document.getElementById('apiToken').value = "";
+        document.getElementById('zoneId').value = "";
+        
+        // UI အား Lock ပြန်လုပ်ပြီး Reset ချရန်
+        const workspace = document.getElementById('workspace');
+        const connDot = document.getElementById('connectionDot');
+        const connText = document.getElementById('connectionText');
+        
+        workspace.classList.add('opacity-40', 'pointer-events-none');
+        connDot.className = "w-2 h-2 rounded-full bg-slate-500 animate-pulse";
+        connText.innerText = "API Offline";
+        
+        dnsRecords = [];
+        displayRecords();
+        triggerToast("သိမ်းဆည်းထားသော အချက်အလက်များ ဖျက်ဆီးပြီးပါပြီ။", "success");
+      }
+    }
+
+    // Dynamic Domain Suffix Detection (တကယ့် Domain ကို Auto တွက်ထုတ်ခြင်း)
+    function getZoneDomainName() {
+      if (dnsRecords && dnsRecords.length > 0) {
+        const found = dnsRecords.find(r => r.zone_name);
+        if (found) return found.zone_name.trim();
+      }
+      return ""; 
+    }
+
+    // Hostname အပြည့်အစုံကို domain suffix ဖြင့် ပေါင်းစပ်ခြင်း
+    function getFullHostname(enteredName) {
+      const zoneDomain = getZoneDomainName();
+      if (!zoneDomain) return enteredName; 
+
+      const trimmedName = enteredName.trim();
+      
+      if (trimmedName === '@' || trimmedName === '') {
+        return zoneDomain;
+      }
+      
+      if (trimmedName.endsWith(zoneDomain)) {
+        return trimmedName;
+      }
+      
+      return `${trimmedName}.${zoneDomain}`;
+    }
+
+    // Success Center Modal ကို ဖွင့်လှစ်ပြသခြင်း
+    function openSuccessModal(title, ip, hostname) {
+      document.getElementById('modalTitle').innerText = title + " ✔";
+      document.getElementById('modalIp').innerText = ip;
+      
+      const fullHost = getFullHostname(hostname);
+      document.getElementById('modalHostname').innerText = fullHost;
+
+      document.getElementById('modalIpCopyBtn').onclick = function() {
+        copyToClipboard(ip, "IP Address");
+      };
+      document.getElementById('modalHostnameCopyBtn').onclick = function() {
+        copyToClipboard(fullHost, "Hostname");
+      };
+
+      const modal = document.getElementById('successModal');
+      const card = document.getElementById('modalCard');
+      
+      modal.classList.remove('hidden');
+      modal.classList.add('flex');
+      setTimeout(() => {
+        card.classList.remove('scale-95');
+        card.classList.add('scale-100');
+      }, 50);
+    }
+
+    // Modal ပိတ်ခြင်း
+    function closeSuccessModal() {
+      const modal = document.getElementById('successModal');
+      const card = document.getElementById('modalCard');
+      
+      card.classList.remove('scale-100');
+      card.classList.add('scale-95');
+      setTimeout(() => {
+        modal.classList.add('hidden');
+        modal.classList.remove('flex');
+      }, 150);
+    }
+
+    // Toast Alert
+    function triggerToast(message, type = 'success') {
+      const container = document.getElementById('toastContainer');
+      const toast = document.createElement('div');
+      
+      const isSuccess = type === 'success';
+      const bgColor = isSuccess ? 'bg-slate-900 border-emerald-500/40 text-slate-100' : 'bg-slate-900 border-rose-500/40 text-slate-100';
+      const icon = isSuccess ? 'fa-circle-check text-emerald-400' : 'fa-circle-xmark text-rose-400';
+      
+      toast.className = `flex items-center gap-3 p-4 rounded-xl border ${bgColor} shadow-2xl backdrop-blur-md transition-all duration-300 transform translate-y-2 opacity-0`;
+      
+      toast.innerHTML = `
+        <i class="fa-solid ${icon} text-lg shrink-0"></i>
+        <span class="text-sm font-medium flex-1">${message}</span>
+        <button onclick="this.parentElement.remove()" class="text-slate-400 hover:text-slate-200 transition">
+          <i class="fa-solid fa-xmark"></i>
+        </button>
+      `;
+      
+      container.appendChild(toast);
+      
+      setTimeout(() => {
+        toast.classList.remove('translate-y-2', 'opacity-0');
+      }, 10);
+      
+      setTimeout(() => {
+        toast.classList.add('translate-y-2', 'opacity-0');
+        setTimeout(() => {
+          toast.remove();
+        }, 300);
+      }, 4000);
+    }
+
+    // Copy to Clipboard
+    function copyToClipboard(text, fieldName) {
+      const tempInput = document.createElement("input");
+      tempInput.value = text;
+      document.body.appendChild(tempInput);
+      tempInput.select();
+      
+      try {
+        const successful = document.execCommand('copy');
+        if (successful) {
+          triggerToast(`"${fieldName}" ကို Copy ကူးယူပြီးပါပြီ။`, 'success');
+        } else {
+          triggerToast("ကူးယူရန် အဆင်မပြေဖြစ်သွားပါသည်။", 'error');
+        }
+      } catch (err) {
+        triggerToast("Browser Control ကြောင့် ကူးယူ၍မရပါ။", 'error');
+      }
+      
+      document.body.removeChild(tempInput);
+    }
+
+    // DNS Records ဆွဲယူခြင်း (တကယ့် API Keys များကို Header သို့ လှမ်းပို့သည်)
+    async function fetchDnsRecords() {
+      const apiToken = localStorage.getItem('cf_api_token') || '';
+      const zoneId = localStorage.getItem('cf_zone_id') || '';
+
+      if (!apiToken || !zoneId) return;
+
+      const workspace = document.getElementById('workspace');
+      const loader = document.getElementById('loadingState');
+      const tableBody = document.getElementById('dnsTableBody');
+      const emptyState = document.getElementById('emptyState');
+      const connDot = document.getElementById('connectionDot');
+      const connText = document.getElementById('connectionText');
+
+      loader.classList.remove('hidden');
+      tableBody.innerHTML = '';
+      emptyState.classList.add('hidden');
+
+      try {
+        const response = await fetch(`${WORKER_URL}/records`, {
+          method: 'GET',
+          headers: {
+            'Authorization': `Bearer ${apiToken}`,
+            'X-Zone-Id': zoneId,
+            'Content-Type': 'application/json'
+          }
+        });
+
+        const result = await response.json();
+
+        if (response.ok && result.success) {
+          dnsRecords = result.result;
+          
+          // UI Connection Active ပြောင်းလဲရန်
+          workspace.classList.remove('opacity-40', 'pointer-events-none');
+          connDot.className = "w-2 h-2 rounded-full bg-emerald-500 animate-pulse";
+          connText.innerText = "Cloudflare API Active";
+          
+          displayRecords();
+          showStatus('ချိတ်ဆက်မှု အောင်မြင်ပြီး DNS Records များ ဆွဲယူပြီးပါပြီ။', 'success');
+        } else {
+          let errMsg = 'ချိတ်ဆက်မှု မအောင်မြင်ပါ!';
+          if (result.error) {
+            errMsg = result.error;
+          } else if (result.errors && result.errors.length > 0) {
+            errMsg = result.errors.map(e => `[Error ${e.code}] ${e.message}`).join('<br>');
+          }
+          showStatus(errMsg, 'error');
+          workspace.classList.add('opacity-40', 'pointer-events-none');
+          connDot.className = "w-2 h-2 rounded-full bg-rose-500";
+          connText.innerText = "API Error";
+        }
+      } catch (err) {
+        showStatus(`Network Error: Worker API သို့ ချိတ်ဆက်မရပါ။ (အသေးစိတ်: ${err.message})`, 'error');
+        workspace.classList.add('opacity-40', 'pointer-events-none');
+        connDot.className = "w-2 h-2 rounded-full bg-rose-500";
+        connText.innerText = "API Offline";
+      } finally {
+        loader.classList.add('hidden');
+      }
+    }
+
+    // Table Display
+    function displayRecords() {
+      const tableBody = document.getElementById('dnsTableBody');
+      const emptyState = document.getElementById('emptyState');
+      const filter = document.getElementById('filterType').value;
+      const searchQuery = document.getElementById('searchInput').value.trim().toLowerCase();
+
+      tableBody.innerHTML = '';
+      
+      let filtered = filter === 'ALL' ? dnsRecords : dnsRecords.filter(r => r.type === filter);
+
+      if (searchQuery) {
+        filtered = filtered.filter(record => 
+          record.name.toLowerCase().includes(searchQuery) || 
+          record.content.toLowerCase().includes(searchQuery)
+        );
+      }
+
+      if (filtered.length === 0) {
+        emptyState.classList.remove('hidden');
+        return;
+      }
+
+      emptyState.classList.add('hidden');
+
+      filtered.forEach(record => {
+        const row = document.createElement('tr');
+        row.className = 'hover:bg-slate-900/60 transition';
+        
+        let proxyBadge = '';
+        if (record.proxied) {
+          proxyBadge = `
+            <span class="inline-flex items-center gap-1.5 text-xs px-2.5 py-1 rounded-full bg-orange-500/10 text-orange-400 border border-orange-500/20">
+              <i class="fa-solid fa-cloud text-[10px]"></i> Proxied
+            </span>`;
+        } else {
+          proxyBadge = `
+            <span class="inline-flex items-center gap-1.5 text-xs px-2.5 py-1 rounded-full bg-slate-800 text-slate-300 border border-slate-700">
+              <i class="fa-solid fa-cloud text-[10px] text-white"></i> DNS Only
+            </span>`;
+        }
+
+        let displayContent = record.content;
+        if (displayContent.length > 35) {
+          displayContent = displayContent.substring(0, 32) + '...';
+        }
+
+        row.innerHTML = `
+          <td class="py-4 px-4 font-bold text-slate-200">
+            <span class="px-2 py-1 rounded text-xs ${getTypeBadgeColor(record.type)}">${record.type}</span>
+          </td>
+          <td class="py-4 px-4 font-semibold text-slate-300">
+            <div class="flex items-center gap-2 group">
+              <span class="break-all">${record.name}</span>
+              <button onclick="copyToClipboard('${record.name}', 'DNS Name')" class="text-slate-500 hover:text-slate-200 transition opacity-0 group-hover:opacity-100 focus:opacity-100" title="Copy Hostname">
+                <i class="fa-regular fa-copy text-xs"></i>
+              </button>
+            </div>
+          </td>
+          <td class="py-4 px-4 text-slate-400 font-mono text-xs">
+            <div class="flex items-center gap-2 group">
+              <span class="break-all" title="${record.content}">${displayContent}</span>
+              <button onclick="copyToClipboard('${record.content}', 'Value / IP Address')" class="text-slate-500 hover:text-slate-200 transition opacity-0 group-hover:opacity-100 focus:opacity-100" title="Copy IP / Value">
+                <i class="fa-regular fa-copy text-[11px]"></i>
+              </button>
+            </div>
+          </td>
+          <td class="py-4 px-4 text-center">${proxyBadge}</td>
+          <td class="py-4 px-4 text-right space-x-2">
+            <button onclick="editRecord('${record.id}')" class="text-blue-400 hover:text-blue-300 p-1.5 hover:bg-slate-800 rounded-lg transition" title="ပြင်ဆင်ရန်">
+              <i class="fa-regular fa-pen-to-square"></i>
+            </button>
+            <button onclick="deleteRecord('${record.id}')" class="text-red-400 hover:text-red-300 p-1.5 hover:bg-slate-800 rounded-lg transition" title="ဖျက်ပစ်ရန်">
+              <i class="fa-regular fa-trash-can"></i>
+            </button>
+          </td>
+        `;
+        tableBody.appendChild(row);
+      });
+    }
+
+    function getTypeBadgeColor(type) {
+      switch (type) {
+        case 'A': return 'bg-blue-500/10 text-blue-400 border border-blue-500/20';
+        case 'AAAA': return 'bg-purple-500/10 text-purple-400 border border-purple-500/20';
+        case 'CNAME': return 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20';
+        case 'TXT': return 'bg-indigo-500/10 text-indigo-400 border border-indigo-500/20';
+        case 'MX': return 'bg-rose-500/10 text-rose-400 border border-rose-500/20';
+        default: return 'bg-slate-800 text-slate-300';
+      }
+    }
+
+    function adjustFormFields() {
+      const type = document.getElementById('recordType').value;
+      const contentLabel = document.getElementById('contentLabel');
+      const contentInput = document.getElementById('recordContent');
+      const proxySection = document.getElementById('proxySection');
+      const mxPriorityField = document.getElementById('mxPriorityField');
+
+      proxySection.classList.add('hidden');
+      mxPriorityField.classList.add('hidden');
+
+      if (type === 'A') {
+        contentLabel.innerText = "IPv4 Address (တန်ဖိုး)";
+        contentInput.placeholder = "ဥပမာ- 192.168.1.1";
+        proxySection.classList.remove('hidden');
+      } else if (type === 'AAAA') {
+        contentLabel.innerText = "IPv6 Address (တန်ဖိုး)";
+        contentInput.placeholder = "ဥပမာ- 2001:db8::1";
+        proxySection.classList.remove('hidden');
+      } else if (type === 'CNAME') {
+        contentLabel.innerText = "Target Domain (ညွှန်ပြမည့် Target)";
+        contentInput.placeholder = "ဥပမာ- ghs.google.com";
+        proxySection.classList.remove('hidden');
+      } else if (type === 'TXT') {
+        contentLabel.innerText = "TXT Content (စာသားဒေတာ)";
+        contentInput.placeholder = "ဥပမာ- v=spf1 include:_spf.google.com ~all";
+      } else if (type === 'MX') {
+        contentLabel.innerText = "Mail Server Host";
+        contentInput.placeholder = "ဥပမာ- mail.example.com";
+        mxPriorityField.classList.remove('hidden');
+      } else if (type === 'NS') {
+        contentLabel.innerText = "Nameserver Host";
+        contentInput.placeholder = "ဥပမာ- ns1.cloudflare.com";
+      } else if (type === 'SRV') {
+        contentLabel.innerText = "SRV Target Content";
+        contentInput.placeholder = "ဥပမာ- 10 80 hostname.com";
+      } else {
+        contentLabel.innerText = "Record Content (တန်ဖိုး)";
+        contentInput.placeholder = "တန်ဖိုး ရိုက်ထည့်ရန်";
+      }
+    }
+
+    // Handle Form Submit
+    async function handleFormSubmit(event) {
+      event.preventDefault();
+      
+      const apiToken = localStorage.getItem('cf_api_token') || '';
+      const zoneId = localStorage.getItem('cf_zone_id') || '';
+
+      if (!apiToken || !zoneId) {
+        triggerToast("ချိတ်ဆက်မှု ပြတ်တောက်သွားပါသည်!", "error");
+        return;
+      }
+
+      const recordId = document.getElementById('editRecordId').value;
+      const type = document.getElementById('recordType').value;
+      const name = document.getElementById('recordName').value.trim();
+      const content = document.getElementById('recordContent').value.trim();
+      const ttl = parseInt(document.getElementById('recordTtl').value);
+      const proxied = document.getElementById('recordProxy').checked;
+
+      const payload = {
+        type: type,
+        name: name,
+        content: content,
+        ttl: ttl
+      };
+
+      if (['A', 'AAAA', 'CNAME'].includes(type)) {
+        payload.proxied = proxied;
+      }
+
+      if (type === 'MX') {
+        payload.priority = parseInt(document.getElementById('recordPriority').value) || 10;
+      }
+
+      const isEdit = recordId !== "";
+      const endpoint = isEdit ? `${WORKER_URL}/records/${recordId}` : `${WORKER_URL}/records`;
+      const method = isEdit ? 'PUT' : 'POST';
+
+      try {
+        const response = await fetch(endpoint, {
+          method: method,
+          headers: {
+            'Authorization': `Bearer ${apiToken}`,
+            'X-Zone-Id': zoneId,
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify(payload)
+        });
+
+        const result = await response.json();
+
+        if (response.ok && (result.success || !result.error)) {
+          const titleMsg = isEdit ? "Update DNS Successfully" : "Create DNS Successfully";
+          
+          const actualHostname = (result.result && result.result.name) ? result.result.name : name;
+          const actualIp = (result.result && result.result.content) ? result.result.content : content;
+          
+          openSuccessModal(titleMsg, actualIp, actualHostname);
+          
+          resetForm();
+          fetchDnsRecords();
+        } else {
+          let errMsg = 'လုပ်ဆောင်မှု မအောင်မြင်ပါ!';
+          if (result.error) {
+            errMsg = result.error;
+          } else if (result.errors && result.errors.length > 0) {
+            errMsg = result.errors.map(e => `[Error ${e.code}] ${e.message}`).join('<br>');
+          }
+          triggerToast(errMsg, 'error');
+        }
+      } catch (err) {
+        triggerToast(`Error: ${err.message}`, 'error');
+      }
+    }
+
+    // Delete Record
+    async function deleteRecord(recordId) {
+      if (!confirm('ဤ DNS Record ကို ဧကန်မုချ ဖျက်ရန် သေချာပါသလား?')) return;
+
+      const apiToken = localStorage.getItem('cf_api_token') || '';
+      const zoneId = localStorage.getItem('cf_zone_id') || '';
+
+      if (!apiToken || !zoneId) return;
+
+      try {
+        const response = await fetch(`${WORKER_URL}/records/${recordId}`, {
+          method: 'DELETE',
+          headers: {
+            'Authorization': `Bearer ${apiToken}`,
+            'X-Zone-Id': zoneId
+          }
+        });
+
+        const result = await response.json();
+
+        if (response.ok && (result.success || !result.error)) {
+          triggerToast("DNS Record ကို အောင်မြင်စွာ ဖျက်သိမ်းပြီးပါပြီ ✔", 'success');
+          fetchDnsRecords();
+        } else {
+          let errMsg = 'ဖျက်ဆီး၍မရပါ!';
+          if (result.error) {
+            errMsg = result.error;
+          } else if (result.errors && result.errors.length > 0) {
+            errMsg = result.errors.map(e => `[Error ${e.code}] ${e.message}`).join('<br>');
+          }
+          triggerToast(errMsg, 'error');
+        }
+      } catch (err) {
+        triggerToast(`Error: ${err.message}`, 'error');
+      }
+    }
+
+    // Edit Form Binding
+    function editRecord(id) {
+      const record = dnsRecords.find(r => r.id === id);
+      if (!record) return;
+
+      document.getElementById('editRecordId').value = record.id;
+      document.getElementById('recordType').value = record.type;
+      document.getElementById('recordName').value = record.name;
+      document.getElementById('recordContent').value = record.content;
+      document.getElementById('recordTtl').value = record.ttl;
+      
+      if (record.proxied !== undefined) {
+        document.getElementById('recordProxy').checked = record.proxied;
+      }
+      
+      if (record.priority !== undefined) {
+        document.getElementById('recordPriority').value = record.priority;
+      }
+
+      adjustFormFields();
+      document.getElementById('formTitle').innerText = "DNS Record ပြင်ဆင်ခြင်း";
+      document.getElementById('submitBtn').innerHTML = `<i class="fa-solid fa-file-pen"></i> Update ပြုလုပ်မည်`;
+      document.getElementById('cancelEditBtn').classList.remove('hidden');
+
+      document.getElementById('dnsForm').scrollIntoView({ behavior: 'smooth' });
+    }
+
+    // Reset Form
+    function resetForm() {
+      document.getElementById('editRecordId').value = "";
+      document.getElementById('dnsForm').reset();
+      document.getElementById('formTitle').innerText = "DNS Record အသစ်ထည့်ရန်";
+      document.getElementById('submitBtn').innerHTML = `<i class="fa-solid fa-floppy-disk"></i> သိမ်းဆည်းမည်`;
+      document.getElementById('cancelEditBtn').classList.add('hidden');
+      adjustFormFields();
+    }
+
+    // Show Status Banner
+    function showStatus(message, type) {
+      const statusBox = document.getElementById('statusMessage');
+      statusBox.classList.remove('hidden', 'bg-emerald-500/10', 'text-emerald-400', 'border-emerald-500/20', 'bg-red-500/10', 'text-red-400', 'border-red-500/20');
+      
+      if (type === 'success') {
+        statusBox.classList.add('bg-emerald-500/10', 'text-emerald-400', 'border', 'border-emerald-500/20');
+        statusBox.innerHTML = `<i class="fa-solid fa-circle-check animate-pulse"></i> <span>${message}</span>`;
+      } else {
+        statusBox.classList.add('bg-red-500/10', 'text-red-400', 'border', 'border-red-500/20');
+        statusBox.innerHTML = `<i class="fa-solid fa-triangle-exclamation"></i> <span>${message}</span>`;
+      }
+    }
+  </script>
+ </body>
+</html>
